@@ -86,12 +86,16 @@ class OdometryNode(Node):
 
         v = (vl + vr)/2.0 # Linear velocity of the robot
 
-        # Update theta FIRST using gyroscope measurement (not wheel differential)
-        self.theta += dt * self.gyro_yaw # Heading angle from gyroscope
+        # Semi-implicit method: update theta by half-step, use for position, then complete theta update
+        theta_dot = self.gyro_yaw
+        self.theta += 0.5 * dt * theta_dot  # Half-step theta update
 
-        # Then update x,y using the new theta
-        self.x += dt * v * math.cos(self.theta) # Position
-        self.y += dt * v * math.sin(self.theta) # Position
+        # Use midpoint theta for position integration (more accurate)
+        self.x += dt * v * math.cos(self.theta)
+        self.y += dt * v * math.sin(self.theta)
+
+        # Complete the theta update
+        self.theta += 0.5 * dt * theta_dot
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
