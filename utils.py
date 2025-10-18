@@ -8,24 +8,24 @@ def quaternion_from_euler(ai, aj, ak):
     Returns:
         q: The corresponding quaternion in format [qx, qy, qz, qw] (python list)
     '''
-    # Half angles
-    ai /= 2.0
-    aj /= 2.0
-    ak /= 2.0
+    # Calculate half angles
+    roll_half = ai * 0.5
+    pitch_half = aj * 0.5
+    yaw_half = ak * 0.5
 
-    # Compute sin and cos for each half angle
-    ci = math.cos(ai)
-    si = math.sin(ai)
-    cj = math.cos(aj)
-    sj = math.sin(aj)
-    ck = math.cos(ak)
-    sk = math.sin(ak)
+    # Calculate sine and cosine of half angles
+    cr = math.cos(roll_half)
+    sr = math.sin(roll_half)
+    cp = math.cos(pitch_half)
+    sp = math.sin(pitch_half)
+    cy = math.cos(yaw_half)
+    sy = math.sin(yaw_half)
 
-    # Compute quaternion components
-    qx = si * cj * ck - ci * sj * sk
-    qy = ci * sj * ck + si * cj * sk
-    qz = ci * cj * sk - si * sj * ck
-    qw = ci * cj * ck + si * sj * sk
+    # Calculate quaternion components using ZYX (yaw-pitch-roll) convention
+    qx = sr * cp * cy - cr * sp * sy
+    qy = cr * sp * cy + sr * cp * sy
+    qz = cr * cp * sy - sr * sp * cy
+    qw = cr * cp * cy + sr * sp * sy
 
     q = [qx, qy, qz, qw]
 

@@ -8,49 +8,75 @@ import rclpy
 from rclpy.node import Node
 #from rclpy.clock import Clock
 
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, PoseStamped
 from tf2_ros import TransformBroadcaster
 
 from std_msgs.msg import String, Float32
-from nav_msgs.msg import Odometry
+from nav_msgs.msg import Odometry, Path
 from mobile_robotics.utils import quaternion_from_euler, lonlat2xyz #edit according to your package's name
 
 
 class OdometryNode(Node):
     # Initialize some variables
 
+    # Gyroscope data
     gyro_yaw = 0.0
+    gyro_roll = 0.0
+    gyro_pitch = 0.0
 
-    # GPS variables
-    lat = 0.0  # Current latitude
-    lon = 0.0  # Current longitude
-    lat0 = 0.0  # Initial latitude (origin)
-    lon0 = 0.0  # Initial longitude (origin)
-    flag_lat = False  # Flag to store first latitude reading
-    flag_lon = False  # Flag to store first longitude reading
+    # Accelerometer data
+    accelx = 0.0
+    accely = 0.0
+    accelz = 0.0
+
+    # Wheel speeds
+    blspeed = 0.0 #back left wheel speed
+    flspeed = 0.0 #front left wheel speed
+    brspeed = 0.0 #back right wheel speed
+    frspeed = 0.0 #front right wheel speed
+
+    # GPS data
+    latitude = 0.0
+    longitude = 0.0
+    lat0 = None  # Initial latitude (reference point)
+    lon0 = None  # Initial longitude (reference point)
+    gps_initialized = False  # Flag to track if reference point is set
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
-    x_prev = 0.0  # Previous x position (for velocity calculation)
-    y_prev = 0.0  # Previous y position (for velocity calculation)
     theta = 0.0 # heading angle
+    l_wheels = 0.3 # Distance between right and left wheels
 
     last_time = 0.0
     current_time = 0.0
 
+    path = Path()  # To accumulate robot trajectory
+
     def __init__(self):
         super().__init__('minimal_subscriber')
-        
-        # Subscribe to gyroscope for heading
-        self.subscription_Gyro_yaw = self.create_subscription(Float32, 'Gyro_yaw', self.callback_Gy, 10)
 
-        # Subscribe to GPS topics
-        self.subscription_lat = self.create_subscription(Float32, 'latitude', self.callback_lat, 10)
-        self.subscription_lon = self.create_subscription(Float32, 'longitude', self.callback_lon, 10)
+        # Declare subscribers to all the topics in the rosbag file, like in the example below. Add the corresponding callback functions.
+        self.subscription_Gyro_yaw = self.create_subscription(Float32, 'Gyro_yaw', self.callback_Gy, 10)
+        self.subscription_Gyro_roll = self.create_subscription(Float32, 'Gyro_roll', self.callback_Gr, 10)
+        self.subscription_Gyro_pitch = self.create_subscription(Float32, 'Gyro_pitch', self.callback_Gp, 10)
+
+        self.subscription_Accelx = self.create_subscription(Float32, 'Accelx', self.callback_Ax, 10)
+        self.subscription_Accely = self.create_subscription(Float32, 'Accely', self.callback_Ay, 10)
+        self.subscription_Accelz = self.create_subscription(Float32, 'Accelz', self.callback_Az, 10)
+
+        self.subscription_Blspeed = self.create_subscription(Float32, 'Blspeed', self.callback_Bl, 10)
+        self.subscription_Brspeed = self.create_subscription(Float32, 'Brspeed', self.callback_Br, 10)
+        self.subscription_Flspeed = self.create_subscription(Float32, 'Flspeed', self.callback_Fl, 10)
+        self.subscription_Frspeed = self.create_subscription(Float32, 'Frspeed', self.callback_Fr, 10)
+
+        self.subscription_latitude = self.create_subscription(Float32, 'latitude', self.callback_lat, 10)
+        self.subscription_longitude = self.create_subscription(Float32, 'longitude', self.callback_lon, 10)
 
         self.last_time = self.get_clock().now().nanoseconds/1e9
 
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10) #keep in mind how to declare publishers for next assignments
+        self.path_pub = self.create_publisher(Path, 'odom/path', 10) # Publisher for robot trajectory
+        self.path.header.frame_id = 'odom' # Initialize path header
         self.timer = self.create_timer(0.1, self.timer_callback_odom) #It creates a timer to periodically publish the odometry.
 
         self.tf_broadcaster = TransformBroadcaster(self) # To broadcast the transformation between coordinate frames.
@@ -64,44 +90,73 @@ class OdometryNode(Node):
     def callback_Gy(self, msg):
         self.gyro_yaw = msg.data
 
+    def callback_Gr(self, msg):
+        self.gyro_roll = msg.data
+
+    def callback_Gp(self, msg):
+        self.gyro_pitch = msg.data
+
+    def callback_Ax(self, msg):
+        self.accelx = msg.data
+
+    def callback_Ay(self, msg):
+        self.accely = msg.data
+
+    def callback_Az(self, msg):
+        self.accelz = msg.data
+
+    def callback_Bl(self, msg):
+        self.blspeed = msg.data
+
+    def callback_Br(self, msg):
+        self.brspeed = msg.data
+
+    def callback_Fl(self, msg):
+        self.flspeed = msg.data
+
+    def callback_Fr(self, msg):
+        self.frspeed = msg.data
+
     def callback_lat(self, msg):
-        self.lat = msg.data
-        if not self.flag_lat:  # Store first reading as origin
-            self.lat0 = msg.data
-            self.flag_lat = True
+        self.latitude = msg.data
 
     def callback_lon(self, msg):
-        self.lon = msg.data
-        if not self.flag_lon:  # Store first reading as origin
-            self.lon0 = msg.data
-            self.flag_lon = True
+        self.longitude = msg.data
 
     def timer_callback_odom(self):
         '''
-        Use GPS measurements for position and gyroscope for heading
+        Compute the linear and angular velocity of the robot using the differential-drive robot kinematics
+        Perform Euler integration to find the position x and y of the robot
         '''
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
-        dt = self.current_time - self.last_time  # Calculate actual dt
+        dt = 0.1  # Fixed timestep matching timer period
 
-        # Get position from GPS (replaces wheel odometry)
-        if self.flag_lat and self.flag_lon:
-            self.x, self.y = lonlat2xyz(self.lat, self.lon, self.lat0, self.lon0)
+        # Debug print - check if timer is running and values are updating
+        print(f"Timer called: x={self.x:.3f}, y={self.y:.3f}, theta={self.theta:.3f}")
 
-        # Calculate velocity from position change
-        if dt > 0:
-            vx = (self.x - self.x_prev) / dt
-            vy = (self.y - self.y_prev) / dt
-            v = math.sqrt(vx**2 + vy**2)
-        else:
-            v = 0.0
+        # Initialize GPS reference point on first valid reading
+        if not self.gps_initialized and self.latitude != 0.0 and self.longitude != 0.0:
+            self.lat0 = self.latitude
+            self.lon0 = self.longitude
+            self.gps_initialized = True
+            print(f"GPS initialized at lat0={self.lat0}, lon0={self.lon0}")
 
-        # Update theta using gyroscope measurement
-        self.theta += dt * self.gyro_yaw
+        # Compute velocities from wheel speeds (needed for twist message)
+        vl = (self.blspeed + self.flspeed)/2.0  # Average Left-wheels speed
+        vr = (self.brspeed + self.frspeed)/2.0  # Average right-wheels speed
+        v = (vl + vr) / 2.0  # Linear velocity of the robot (at the center)
+        w = (vr - vl) / self.l_wheels  # Angular velocity of the robot
 
-        # Store current position for next iteration
-        self.x_prev = self.x
-        self.y_prev = self.y
+        # Debug print - check velocities
+        print(f"Velocities: vl={vl:.3f}, vr={vr:.3f}, v={v:.3f}, w={w:.3f}")
+
+        # Update heading from angular velocity (wheel odometry)
+        self.theta += w * dt
+
+        # Compute position from GPS using lonlat2xyz
+        if self.gps_initialized:
+            self.x, self.y = lonlat2xyz(self.latitude, self.longitude, self.lat0, self.lon0)
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
@@ -140,7 +195,24 @@ class OdometryNode(Node):
         odom.twist.twist.linear.z = 0.0
         odom.twist.twist.angular.x = 0.0
         odom.twist.twist.angular.y = 0.0
-        odom.twist.twist.angular.z = self.gyro_yaw  # Use gyroscope measurement
+        odom.twist.twist.angular.z = w
+
+        # Create PoseStamped for path
+        pose_stamped = PoseStamped()
+        pose_stamped.header.stamp = self.get_clock().now().to_msg()
+        pose_stamped.header.frame_id = 'odom'
+        pose_stamped.pose.position.x = self.x
+        pose_stamped.pose.position.y = self.y
+        pose_stamped.pose.position.z = 0.0
+        pose_stamped.pose.orientation.x = quater[0]
+        pose_stamped.pose.orientation.y = quater[1]
+        pose_stamped.pose.orientation.z = quater[2]
+        pose_stamped.pose.orientation.w = quater[3]
+
+        # Add to path and publish
+        self.path.poses.append(pose_stamped)
+        self.path.header.stamp = self.get_clock().now().to_msg()
+        self.path_pub.publish(self.path)
 
         self.odom_pub.publish(odom)
 
@@ -157,12 +229,12 @@ class OdometryNode(Node):
         t.header.frame_id = frame_id
         t.child_frame_id = child_frame_id
 
-        # Set the translation
+        # Set translation (position)
         t.transform.translation.x = pos[0]
         t.transform.translation.y = pos[1]
         t.transform.translation.z = pos[2]
 
-        # Set the rotation
+        # Set rotation (orientation quaternion)
         t.transform.rotation.x = quater[0]
         t.transform.rotation.y = quater[1]
         t.transform.rotation.z = quater[2]
