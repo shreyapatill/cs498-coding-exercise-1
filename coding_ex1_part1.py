@@ -31,6 +31,8 @@ class OdometryNode(Node):
     frspeed = 0.0 #front right wheel speed
     latitude = 0.0
     longitude = 0.0
+    lat0 = None # gps origin latitude
+    lon0 = None # gps origin longitude
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
@@ -113,16 +115,25 @@ class OdometryNode(Node):
         '''
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
-        dt = self.current_time - self.last_time # DeltaT
+        dt = 0.1 # fixed timestep
+        
+        # store first gps as origin
+        if self.lat0 is None and self.latitude != 0.0:
+            self.lat0 = self.latitude
+            self.lon0 = self.longitude
         
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
         vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
         
         v = (vl + vr)/2.0 # linear velocity of the robot
         w = (vr - vl)/self.l_wheels # angular velocity of the robot
-        self.x += v * math.cos(self.theta) * dt # position x
-        self.y += v * math.sin(self.theta) * dt # position y
+        
+        # update theta first before x,y
         self.theta += w * dt # heading angle
+        
+        # use gps for position
+        if self.lat0 is not None:
+            self.x, self.y = lonlat2xyz(self.latitude, self.longitude, self.lat0, self.lon0)
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
