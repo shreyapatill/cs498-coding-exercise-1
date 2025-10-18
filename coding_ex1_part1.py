@@ -128,8 +128,8 @@ class OdometryNode(Node):
         v = (vl + vr)/2.0 # linear velocity of the robot
         w = (vr - vl)/self.l_wheels # angular velocity of the robot
         
-        # update theta first before x,y
-        self.theta += w * dt # heading angle
+        # use gyro yaw directly for heading angle
+        self.theta = self.gyro_yaw
         
         # use gps for position
         if self.lat0 is not None:
