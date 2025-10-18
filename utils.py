@@ -1,25 +1,33 @@
 import numpy as np
 import math
 
-def quaternion_from_euler(ai, aj, ak): 
+def quaternion_from_euler(ai, aj, ak):
     '''
     Arguments:
         ai, aj, ak: Euler angles in RPY order (Roll, Pitch and Yaw) (float)
     Returns:
         q: The corresponding quaternion in format [qx, qy, qz, qw] (python list)
     '''
-    q = [0.0, 0.0, 0.0, 0.0]
-    cy = math.cos(ak * 0.5)
-    sy = math.sin(ak * 0.5)
-    cp = math.cos(aj * 0.5)
-    sp = math.sin(aj * 0.5)
-    cr = math.cos(ai * 0.5)
-    sr = math.sin(ai * 0.5)
+    # Half angles
+    ai /= 2.0
+    aj /= 2.0
+    ak /= 2.0
 
-    q[3] = cr * cp * cy + sr * sp * sy  # w
-    q[0] = sr * cp * cy - cr * sp * sy  # x
-    q[1] = cr * sp * cy + sr * cp * sy  # y
-    q[2] = cr * cp * sy - sr * sp * cy  # z
+    # Compute sin and cos for each half angle
+    ci = math.cos(ai)
+    si = math.sin(ai)
+    cj = math.cos(aj)
+    sj = math.sin(aj)
+    ck = math.cos(ak)
+    sk = math.sin(ak)
+
+    # Compute quaternion components
+    qx = si * cj * ck - ci * sj * sk
+    qy = ci * sj * ck + si * cj * sk
+    qz = ci * cj * sk - si * sj * ck
+    qw = ci * cj * ck + si * sj * sk
+
+    q = [qx, qy, qz, qw]
 
     return q 
 

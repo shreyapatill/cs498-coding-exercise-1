@@ -18,27 +18,20 @@ from mobile_robotics.utils import quaternion_from_euler, lonlat2xyz #edit accord
 
 class OdometryNode(Node):
     # Initialize some variables
-    
+
     gyro_yaw = 0.0
-    gyro_roll = 0.0
-    gyro_pitch = 0.0
-    accelx = 0.0
-    accely = 0.0
-    accelz = 0.0
     blspeed = 0.0 #back left wheel speed
-    brspeed = 0.0 #back right wheel speed
     flspeed = 0.0 #front left wheel speed
+    brspeed = 0.0 #back right wheel speed
     frspeed = 0.0 #front right wheel speed
-    latitude = 0.0
-    longitude = 0.0
-    lat0 = None
-    lon0 = None
+
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
     theta = 0.0 # heading angle
     l_wheels = 0.3 # Distance between right and left wheels
 
+    last_time = 0.0
     current_time = 0.0
 
     def __init__(self):
@@ -46,17 +39,12 @@ class OdometryNode(Node):
         
         # Declare subscribers to all the topics in the rosbag file, like in the example below. Add the corresponding callback functions.
         self.subscription_Gyro_yaw = self.create_subscription(Float32, 'Gyro_yaw', self.callback_Gy, 10)
-        self.subscription_Gyro_roll = self.create_subscription(Float32, 'Gyro_roll', self.callback_Gr, 10)
-        self.subscription_Gyro_pitch = self.create_subscription(Float32, 'Gyro_pitch', self.callback_Gp, 10)
-        self.subscription_Accelx = self.create_subscription(Float32, 'Accelx', self.callback_Ax, 10)
-        self.subscription_Accely = self.create_subscription(Float32, 'Accely', self.callback_Ay, 10)
-        self.subscription_Accelz = self.create_subscription(Float32, 'Accelz', self.callback_Az, 10)
-        self.subscription_Blspeed = self.create_subscription(Float32, 'Blspeed', self.callback_Bl, 10)
-        self.subscription_Brspeed = self.create_subscription(Float32, 'Brspeed', self.callback_Br, 10)
-        self.subscription_Flspeed = self.create_subscription(Float32, 'Flspeed', self.callback_Fl, 10)
-        self.subscription_Frspeed = self.create_subscription(Float32, 'Frspeed', self.callback_Fr, 10)
-        self.subscription_latitude = self.create_subscription(Float32, 'latitude', self.callback_lat, 10)
-        self.subscription_longitude = self.create_subscription(Float32, 'longitude', self.callback_lon, 10)
+        self.subscription_Blspeed = self.create_subscription(Float32, 'Blspeed', self.callback_Blspeed, 10)
+        self.subscription_Flspeed = self.create_subscription(Float32, 'Flspeed', self.callback_Flspeed, 10)
+        self.subscription_Brspeed = self.create_subscription(Float32, 'Brspeed', self.callback_Brspeed, 10)
+        self.subscription_Frspeed = self.create_subscription(Float32, 'Frspeed', self.callback_Frspeed, 10)
+
+        self.last_time = self.get_clock().now().nanoseconds/1e9
         
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10) #keep in mind how to declare publishers for next assignments
         self.timer = self.create_timer(0.1, self.timer_callback_odom) #It creates a timer to periodically publish the odometry.
@@ -71,39 +59,18 @@ class OdometryNode(Node):
 
     def callback_Gy(self, msg):
         self.gyro_yaw = msg.data
-    
-    def callback_Gr(self, msg):
-        self.gyro_roll = msg.data
-    
-    def callback_Gp(self, msg):
-        self.gyro_pitch = msg.data
-    
-    def callback_Ax(self, msg):
-        self.accelx = msg.data
-    
-    def callback_Ay(self, msg):
-        self.accely = msg.data
-    
-    def callback_Az(self, msg):
-        self.accelz = msg.data
-    
-    def callback_Bl(self, msg):
+
+    def callback_Blspeed(self, msg):
         self.blspeed = msg.data
-    
-    def callback_Br(self, msg):
-        self.brspeed = msg.data
-    
-    def callback_Fl(self, msg):
+
+    def callback_Flspeed(self, msg):
         self.flspeed = msg.data
-    
-    def callback_Fr(self, msg):
+
+    def callback_Brspeed(self, msg):
+        self.brspeed = msg.data
+
+    def callback_Frspeed(self, msg):
         self.frspeed = msg.data
-    
-    def callback_lat(self, msg):
-        self.latitude = msg.data
-    
-    def callback_lon(self, msg):
-        self.longitude = msg.data
 
     def timer_callback_odom(self):
         '''
@@ -111,26 +78,17 @@ class OdometryNode(Node):
         Perform Euler integration to find the position x and y of the robot
         '''
 
-        # store first gps as origin
-        if self.lat0 is None and self.latitude != 0.0:
-            self.lat0 = self.latitude
-            self.lon0 = self.longitude
-        
-        dt = 0.1 # fixed timestep
-        self.current_time += dt # increment time
-        
+        self.current_time = self.get_clock().now().nanoseconds/1e9
+        dt = self.current_time - self.last_time # DeltaT
+
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
-        vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
-        
-        v = (vl + vr)/2.0 # linear velocity of the robot
-        w = self.gyro_yaw # angular velocity from gyroscope
-        
-        # integrate gyroscope for heading angle (gyro is in deg/s, convert to rad/s)
-        self.theta += dt * math.radians(w)
-        
-        # use gps for position
-        if self.lat0 is not None:
-            self.x, self.y = lonlat2xyz(self.latitude, self.longitude, self.lat0, self.lon0)
+        vr = (self.brspeed + self.frspeed)/2.0  # Average right-wheels speed
+
+        v = (vl + vr)/2.0 # Linear velocity of the robot
+        w = (vr - vl)/self.l_wheels # Angular velocity of the robot
+        self.x += v * math.cos(self.theta) * dt # Position
+        self.y += v * math.sin(self.theta) * dt # Position
+        self.theta += w * dt # Heading angle
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
@@ -172,6 +130,8 @@ class OdometryNode(Node):
         odom.twist.twist.angular.z = w
 
         self.odom_pub.publish(odom)
+
+        self.last_time = self.current_time
         
     def broadcast_tf(self, pos, quater, frame_id, child_frame_id):
         '''
@@ -184,10 +144,12 @@ class OdometryNode(Node):
         t.header.frame_id = frame_id
         t.child_frame_id = child_frame_id
 
+        # Set the translation
         t.transform.translation.x = pos[0]
         t.transform.translation.y = pos[1]
         t.transform.translation.z = pos[2]
 
+        # Set the rotation
         t.transform.rotation.x = quater[0]
         t.transform.rotation.y = quater[1]
         t.transform.rotation.z = quater[2]
