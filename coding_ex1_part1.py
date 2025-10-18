@@ -33,6 +33,8 @@ class OdometryNode(Node):
     longitude = 0.0
     lat0 = None # gps origin latitude
     lon0 = None # gps origin longitude
+    flag_lat = False # flag to store first latitude
+    flag_lon = False # flag to store first longitude
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
@@ -104,9 +106,15 @@ class OdometryNode(Node):
     
     def callback_lat(self, msg):
         self.latitude = msg.data
+        if not self.flag_lat:
+            self.lat0 = msg.data
+            self.flag_lat = True
     
     def callback_lon(self, msg):
         self.longitude = msg.data
+        if not self.flag_lon:
+            self.lon0 = msg.data
+            self.flag_lon = True
 
     def timer_callback_odom(self):
         '''
@@ -116,11 +124,6 @@ class OdometryNode(Node):
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
         dt = 0.1 # fixed timestep
-        
-        # store first gps as origin
-        if self.lat0 is None and self.latitude != 0.0:
-            self.lat0 = self.latitude
-            self.lon0 = self.longitude
         
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
         vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
