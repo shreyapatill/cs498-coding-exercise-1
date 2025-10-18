@@ -79,14 +79,14 @@ class OdometryNode(Node):
         '''
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
-        dt = 0.1 # Fixed timestep as per requirements
+        dt = self.current_time - self.last_time  # Calculate actual dt
 
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
         vr = (self.brspeed + self.frspeed)/2.0  # Average right-wheels speed
 
         v = (vl + vr)/2.0 # Linear velocity of the robot
 
-        # Update theta FIRST using gyroscope (as per guide's requirement)
+        # Update theta using gyroscope measurement (angular velocity * dt)
         self.theta += dt * self.gyro_yaw
 
         # Then use the updated theta for position integration
