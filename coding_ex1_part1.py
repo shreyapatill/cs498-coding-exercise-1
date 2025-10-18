@@ -20,11 +20,17 @@ class OdometryNode(Node):
     # Initialize some variables
     
     gyro_yaw = 0.0
+    gyro_roll = 0.0
+    gyro_pitch = 0.0
+    accelx = 0.0
+    accely = 0.0
+    accelz = 0.0
     blspeed = 0.0 #back left wheel speed
-    flspeed = 0.0 #front left wheel speed
     brspeed = 0.0 #back right wheel speed
+    flspeed = 0.0 #front left wheel speed
     frspeed = 0.0 #front right wheel speed
-
+    latitude = 0.0
+    longitude = 0.0
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
@@ -33,25 +39,23 @@ class OdometryNode(Node):
 
     last_time = 0.0
     current_time = 0.0
-    
-    last_x = 0.0
-    last_y = 0.0
-    last_theta = 0.0
-    
-    vx = 0.0
-    vy = 0.0
-    last_vx = 0.0
-    last_vy = 0.0
 
     def __init__(self):
         super().__init__('minimal_subscriber')
         
         # Declare subscribers to all the topics in the rosbag file, like in the example below. Add the corresponding callback functions.
         self.subscription_Gyro_yaw = self.create_subscription(Float32, 'Gyro_yaw', self.callback_Gy, 10)
+        self.subscription_Gyro_roll = self.create_subscription(Float32, 'Gyro_roll', self.callback_Gr, 10)
+        self.subscription_Gyro_pitch = self.create_subscription(Float32, 'Gyro_pitch', self.callback_Gp, 10)
+        self.subscription_Accelx = self.create_subscription(Float32, 'Accelx', self.callback_Ax, 10)
+        self.subscription_Accely = self.create_subscription(Float32, 'Accely', self.callback_Ay, 10)
+        self.subscription_Accelz = self.create_subscription(Float32, 'Accelz', self.callback_Az, 10)
         self.subscription_Blspeed = self.create_subscription(Float32, 'Blspeed', self.callback_Bl, 10)
-        self.subscription_Flspeed = self.create_subscription(Float32, 'Flspeed', self.callback_Fl, 10)
         self.subscription_Brspeed = self.create_subscription(Float32, 'Brspeed', self.callback_Br, 10)
+        self.subscription_Flspeed = self.create_subscription(Float32, 'Flspeed', self.callback_Fl, 10)
         self.subscription_Frspeed = self.create_subscription(Float32, 'Frspeed', self.callback_Fr, 10)
+        self.subscription_latitude = self.create_subscription(Float32, 'latitude', self.callback_lat, 10)
+        self.subscription_longitude = self.create_subscription(Float32, 'longitude', self.callback_lon, 10)
 
         self.last_time = self.get_clock().now().nanoseconds/1e9
         
@@ -68,19 +72,39 @@ class OdometryNode(Node):
 
     def callback_Gy(self, msg):
         self.gyro_yaw = msg.data
-        
+    
+    def callback_Gr(self, msg):
+        self.gyro_roll = msg.data
+    
+    def callback_Gp(self, msg):
+        self.gyro_pitch = msg.data
+    
+    def callback_Ax(self, msg):
+        self.accelx = msg.data
+    
+    def callback_Ay(self, msg):
+        self.accely = msg.data
+    
+    def callback_Az(self, msg):
+        self.accelz = msg.data
+    
     def callback_Bl(self, msg):
         self.blspeed = msg.data
-        
-    def callback_Fl(self, msg):
-        self.flspeed = msg.data
-        
+    
     def callback_Br(self, msg):
         self.brspeed = msg.data
-        
+    
+    def callback_Fl(self, msg):
+        self.flspeed = msg.data
+    
     def callback_Fr(self, msg):
         self.frspeed = msg.data
-        
+    
+    def callback_lat(self, msg):
+        self.latitude = msg.data
+    
+    def callback_lon(self, msg):
+        self.longitude = msg.data
 
     def timer_callback_odom(self):
         '''
@@ -89,21 +113,16 @@ class OdometryNode(Node):
         '''
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
-        dt = 0.1  # Fixed timestep as suggested in debugging hints
+        dt = self.current_time - self.last_time # DeltaT
         
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
-        vr = (self.brspeed + self.frspeed)/2.0  #Average right-wheels speed
+        vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
         
-        v = (vl + vr)/2.0  #Linear velocity of the robot
-        w = (vr - vl)/self.l_wheels  #Angular velocity of the robot
-        
-        self.theta = self.last_theta + math.radians(self.gyro_yaw) * dt
-        
-        # Calculate velocity components and integrate position using updated theta
-        self.vx = math.cos(self.theta) * v
-        self.vy = math.sin(self.theta) * v
-        self.x = self.last_x + self.vx * dt 
-        self.y = self.last_y + self.vy * dt
+        v = (vl + vr)/2.0 # linear velocity of the robot
+        w = (vr - vl)/self.l_wheels # angular velocity of the robot
+        self.x += v * math.cos(self.theta) * dt # position x
+        self.y += v * math.sin(self.theta) * dt # position y
+        self.theta += w * dt # heading angle
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
@@ -137,21 +156,16 @@ class OdometryNode(Node):
 
         # set the velocities
         odom.child_frame_id = child_frame_id
-        odom.twist.twist.linear.x = self.vx
-        odom.twist.twist.linear.y = self.vy
+        odom.twist.twist.linear.x = v
+        odom.twist.twist.linear.y = 0.0
         odom.twist.twist.linear.z = 0.0
         odom.twist.twist.angular.x = 0.0
         odom.twist.twist.angular.y = 0.0
-        odom.twist.twist.angular.z = math.radians(self.gyro_yaw)
+        odom.twist.twist.angular.z = w
 
         self.odom_pub.publish(odom)
 
         self.last_time = self.current_time
-        self.last_x = self.x
-        self.last_y = self.y
-        self.last_vx = self.vx
-        self.last_vy = self.vy
-        self.last_theta = self.theta
         
     def broadcast_tf(self, pos, quater, frame_id, child_frame_id):
         '''
@@ -164,12 +178,10 @@ class OdometryNode(Node):
         t.header.frame_id = frame_id
         t.child_frame_id = child_frame_id
 
-        # Set translation (position)
         t.transform.translation.x = pos[0]
         t.transform.translation.y = pos[1]
         t.transform.translation.z = pos[2]
 
-        # Set rotation (quaternion)
         t.transform.rotation.x = quater[0]
         t.transform.rotation.y = quater[1]
         t.transform.rotation.z = quater[2]
