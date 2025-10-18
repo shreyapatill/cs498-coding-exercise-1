@@ -141,10 +141,12 @@ class OdometryNode(Node):
         # Debug print - check velocities
         print(f"Velocities: vl={vl:.3f}, vr={vr:.3f}, v={v:.3f}, w={w:.3f}")
 
-        # Euler integration to update position and heading
+        # Use gyroscope measurement for heading (not integrated angular velocity)
+        self.theta = self.gyro_yaw
+
+        # Euler integration to update position
         self.x += v * math.cos(self.theta) * dt
         self.y += v * math.sin(self.theta) * dt
-        self.theta += w * dt
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)

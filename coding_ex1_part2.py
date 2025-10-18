@@ -151,8 +151,8 @@ class OdometryNode(Node):
         # Debug print - check velocities
         print(f"Velocities: vl={vl:.3f}, vr={vr:.3f}, v={v:.3f}, w={w:.3f}")
 
-        # Update heading from angular velocity (wheel odometry)
-        self.theta += w * dt
+        # Use gyroscope measurement for heading (not integrated angular velocity)
+        self.theta = self.gyro_yaw
 
         # Compute position from GPS using lonlat2xyz
         if self.gps_initialized:
