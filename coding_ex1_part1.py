@@ -97,7 +97,7 @@ class OdometryNode(Node):
         v = (vl + vr)/2.0  #Linear velocity of the robot
         w = (vr - vl)/self.l_wheels  #Angular velocity of the robot
         
-        self.theta = self.last_theta + self.gyro_yaw * dt
+        self.theta = self.last_theta + math.radians(self.gyro_yaw) * dt
         
         # Calculate velocity components and integrate position using updated theta
         self.vx = math.cos(self.theta) * v
@@ -142,7 +142,7 @@ class OdometryNode(Node):
         odom.twist.twist.linear.z = 0.0
         odom.twist.twist.angular.x = 0.0
         odom.twist.twist.angular.y = 0.0
-        odom.twist.twist.angular.z = w
+        odom.twist.twist.angular.z = math.radians(self.gyro_yaw)
 
         self.odom_pub.publish(odom)
 
