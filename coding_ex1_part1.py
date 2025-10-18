@@ -234,6 +234,7 @@ class OdometryNode(Node):
     def callback_write_txt_file(self):
         if (self.x != 0 or self.y != 0 or self.theta != 0):
             self.file_object_results.write(str(self.current_time) + " " + str(self.x)+" "+str(self.y)+" "+str(self.theta)+"\n")
+            self.file_object_results.flush()  # Flush buffer to ensure data is written to disk immediately
 
     
 def main(args=None):
