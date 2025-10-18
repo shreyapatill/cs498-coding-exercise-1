@@ -79,16 +79,19 @@ class OdometryNode(Node):
         '''
 
         self.current_time = self.get_clock().now().nanoseconds/1e9
-        dt = self.current_time - self.last_time # DeltaT
+        dt = 0.1 # Fixed timestep as per requirements
 
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
         vr = (self.brspeed + self.frspeed)/2.0  # Average right-wheels speed
 
         v = (vl + vr)/2.0 # Linear velocity of the robot
-        w = (vr - vl)/self.l_wheels # Angular velocity of the robot
-        self.x += v * math.cos(self.theta) * dt # Position
-        self.y += v * math.sin(self.theta) * dt # Position
-        self.theta += w * dt # Heading angle
+
+        # Update theta FIRST using gyroscope measurement (not wheel differential)
+        self.theta += dt * self.gyro_yaw # Heading angle from gyroscope
+
+        # Then update x,y using the new theta
+        self.x += dt * v * math.cos(self.theta) # Position
+        self.y += dt * v * math.sin(self.theta) # Position
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
@@ -127,7 +130,7 @@ class OdometryNode(Node):
         odom.twist.twist.linear.z = 0.0
         odom.twist.twist.angular.x = 0.0
         odom.twist.twist.angular.y = 0.0
-        odom.twist.twist.angular.z = w
+        odom.twist.twist.angular.z = self.gyro_yaw  # Use gyroscope measurement
 
         self.odom_pub.publish(odom)
 
