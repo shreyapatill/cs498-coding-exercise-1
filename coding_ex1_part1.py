@@ -123,10 +123,10 @@ class OdometryNode(Node):
         vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
         
         v = (vl + vr)/2.0 # linear velocity of the robot
-        w = (vr - vl)/self.l_wheels # angular velocity of the robot
+        w = self.gyro_yaw # angular velocity from gyroscope
         
-        # use gyroscope for heading angle
-        self.theta = self.gyro_yaw
+        # integrate gyroscope for heading angle (gyro is in deg/s, convert to rad/s)
+        self.theta += dt * math.radians(w)
         
         # use gps for position
         if self.lat0 is not None:
