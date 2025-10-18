@@ -86,12 +86,12 @@ class OdometryNode(Node):
 
         v = (vl + vr)/2.0 # Linear velocity of the robot
 
-        # Update theta using gyroscope measurement (angular velocity * dt)
-        self.theta += dt * self.gyro_yaw
-
-        # Then use the updated theta for position integration
+        # Standard Forward Euler: use CURRENT theta for position
         self.x += dt * v * math.cos(self.theta)
         self.y += dt * v * math.sin(self.theta)
+
+        # Then update theta using gyroscope measurement
+        self.theta += dt * self.gyro_yaw
 
         position = [self.x, self.y, 0.0]
         quater = quaternion_from_euler(0.0, 0.0, self.theta)
