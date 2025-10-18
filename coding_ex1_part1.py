@@ -97,7 +97,7 @@ class OdometryNode(Node):
         v = (vl + vr)/2.0  #Linear velocity of the robot
         w = (vr - vl)/self.l_wheels  #Angular velocity of the robot
         
-        self.theta = self.last_theta + math.radians(self.gyro_yaw) * dt
+        self.theta = self.last_theta + self.gyro_yaw * dt
         
         # Calculate velocity components and integrate position using updated theta
         self.vx = math.cos(self.theta) * v

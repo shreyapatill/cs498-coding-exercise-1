@@ -112,7 +112,7 @@ class OdometryNode(Node):
         self.y = y_gps
         
         # Calculate heading from gyro
-        self.theta = self.last_theta + math.radians(self.gyro_yaw) * dt
+        self.theta = self.last_theta + self.gyro_yaw * dt
         
         # Calculate velocities from position differences
         if dt > 0:
