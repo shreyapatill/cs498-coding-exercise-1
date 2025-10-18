@@ -31,17 +31,14 @@ class OdometryNode(Node):
     frspeed = 0.0 #front right wheel speed
     latitude = 0.0
     longitude = 0.0
-    lat0 = None # gps origin latitude
-    lon0 = None # gps origin longitude
-    flag_lat = False # flag to store first latitude
-    flag_lon = False # flag to store first longitude
+    lat0 = None
+    lon0 = None
 
     x = 0.0 # x robot's position
     y = 0.0 # y robot's position
     theta = 0.0 # heading angle
     l_wheels = 0.3 # Distance between right and left wheels
 
-    last_time = 0.0
     current_time = 0.0
 
     def __init__(self):
@@ -60,8 +57,6 @@ class OdometryNode(Node):
         self.subscription_Frspeed = self.create_subscription(Float32, 'Frspeed', self.callback_Fr, 10)
         self.subscription_latitude = self.create_subscription(Float32, 'latitude', self.callback_lat, 10)
         self.subscription_longitude = self.create_subscription(Float32, 'longitude', self.callback_lon, 10)
-
-        self.last_time = self.get_clock().now().nanoseconds/1e9
         
         self.odom_pub = self.create_publisher(Odometry, 'odom', 10) #keep in mind how to declare publishers for next assignments
         self.timer = self.create_timer(0.1, self.timer_callback_odom) #It creates a timer to periodically publish the odometry.
@@ -106,15 +101,9 @@ class OdometryNode(Node):
     
     def callback_lat(self, msg):
         self.latitude = msg.data
-        if not self.flag_lat:
-            self.lat0 = msg.data
-            self.flag_lat = True
     
     def callback_lon(self, msg):
         self.longitude = msg.data
-        if not self.flag_lon:
-            self.lon0 = msg.data
-            self.flag_lon = True
 
     def timer_callback_odom(self):
         '''
@@ -122,8 +111,13 @@ class OdometryNode(Node):
         Perform Euler integration to find the position x and y of the robot
         '''
 
-        self.current_time = self.get_clock().now().nanoseconds/1e9
+        # store first gps as origin
+        if self.lat0 is None and self.latitude != 0.0:
+            self.lat0 = self.latitude
+            self.lon0 = self.longitude
+        
         dt = 0.1 # fixed timestep
+        self.current_time += dt # increment time
         
         vl = (self.blspeed + self.flspeed)/2.0  #Average Left-wheels speed
         vr = (self.brspeed + self.frspeed)/2.0  # average right-wheels speed
@@ -131,8 +125,8 @@ class OdometryNode(Node):
         v = (vl + vr)/2.0 # linear velocity of the robot
         w = (vr - vl)/self.l_wheels # angular velocity of the robot
         
-        # use gyro yaw directly for heading angle
-        self.theta = self.gyro_yaw
+        # update theta first to avoid drift
+        self.theta += w * dt # heading angle
         
         # use gps for position
         if self.lat0 is not None:
@@ -178,8 +172,6 @@ class OdometryNode(Node):
         odom.twist.twist.angular.z = w
 
         self.odom_pub.publish(odom)
-
-        self.last_time = self.current_time
         
     def broadcast_tf(self, pos, quater, frame_id, child_frame_id):
         '''
