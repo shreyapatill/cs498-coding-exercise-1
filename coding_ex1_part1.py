@@ -136,12 +136,12 @@ class OdometryNode(Node):
         vr = (self.brspeed + self.frspeed)/2.0  # Average right-wheels speed
 
         v = (vl + vr) / 2.0 # Linear velocity of the robot (at the center)
-        w = (vr - vl) / self.l_wheels # Angular velocity of the robot
+        w = self.gyro_yaw # Angular velocity from gyroscope
 
         # Debug print - check velocities
         print(f"Velocities: vl={vl:.3f}, vr={vr:.3f}, v={v:.3f}, w={w:.3f}")
 
-        # Use gyroscope measurement for heading (not integrated angular velocity)
+        # Use gyroscope measurement for heading
         self.theta = self.gyro_yaw
 
         # Euler integration to update position
