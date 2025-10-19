@@ -50,8 +50,10 @@ def transformations(Rab, Rbc, Tab, Tbc):
 
 class problem_set2:
 
-    pid_w = PID(-1, -0.0, -0.0, setpoint=0.0, output_limits=(-5, 5))
+    pid_w = PID(-2.0, -0.1, -0.5, setpoint=0.0, output_limits=(-5, 5))
     pid_w.error_map = pi_clip #Function to map angle error values between -pi and pi.
+    
+    pid_v = PID(-1.5, -0.05, -0.2, setpoint=0.0, output_limits=(0, 2))
     
     def __init__(self):
         
@@ -101,7 +103,7 @@ class problem_set2:
     
     def compute_control(self, angle_error, distance_error): # It computes the control commands
         control_w = self.pid_w(angle_error, dt = self.dt)
-        control_v = 1.0
+        control_v = self.pid_v(distance_error, dt = self.dt)
         return control_w, control_v
 
     def save_results(self):
