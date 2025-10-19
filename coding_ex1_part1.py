@@ -141,8 +141,8 @@ class OdometryNode(Node):
         # Debug print - check velocities
         print(f"Velocities: vl={vl:.3f}, vr={vr:.3f}, v={v:.3f}, w={w:.3f}")
 
-        # Use gyroscope measurement for heading
-        self.theta = self.gyro_yaw
+        # Integrate heading from gyroscope rate over time
+        self.theta += dt * self.gyro_yaw
 
         # Euler integration to update position
         self.x += v * math.cos(self.theta) * dt
